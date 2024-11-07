@@ -59,9 +59,13 @@ fun SubjectsListScreen(onDetailsScreen: (Int) -> Unit) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var subjectToDelete by remember { mutableStateOf<SubjectEntity?>(null) }
 
-
+    // Observe the filtered subjects
     val subjects by viewModel.filteredSubjects.collectAsState()
 
+    var searchQuery by remember { mutableStateOf("") }
+    fun updateSearch(query: String) {
+        searchQuery = query
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,8 +77,11 @@ fun SubjectsListScreen(onDetailsScreen: (Int) -> Unit) {
                 .padding(8.dp)
         ) {
             TextField(
-                value = viewModel.searchQuery,
-                onValueChange = { viewModel.searchQuery = it },
+                value = searchQuery,
+                onValueChange = { query ->
+                    updateSearch(query)
+                    viewModel.fetchSubjects(query)  // Pass the search query to ViewModel
+                },
                 placeholder = { Text("Search subjects", color = Color.Gray) },
                 leadingIcon = {
                     Icon(
@@ -86,7 +93,7 @@ fun SubjectsListScreen(onDetailsScreen: (Int) -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(4.dp)
-                    .padding(top = 12.dp),
+                    .padding(top =12.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = TextFieldDefaults.textFieldColors(
                     containerColor = Color(0xFFA7BEAE),
@@ -153,6 +160,7 @@ fun SubjectsListScreen(onDetailsScreen: (Int) -> Unit) {
                     }
                 }
             }
+
             item {
                 Button(
                     onClick = { showAddDialog = true },
