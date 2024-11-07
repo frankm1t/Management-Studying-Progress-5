@@ -38,22 +38,19 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SubjectsListScreen(
-    onDetailsScreen: (Int) -> Unit,
-) {
+fun SubjectsListScreen(onDetailsScreen: (Int) -> Unit) {
     val context = LocalContext.current
     val db = DatabaseStorage.getDatabase(context)
 
-    val subjectsListState = remember { mutableStateOf<List<SubjectEntity>>(emptyList()) }
-    var searchQuery by remember { mutableStateOf("") }
-    val coroutineScope = rememberCoroutineScope()
+    // Create the ViewModel using the factory
+    val viewModel: SubjectsListViewModel = viewModel(factory = SubjectsListViewModelFactory(db))
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -63,69 +60,7 @@ fun SubjectsListScreen(
     var subjectToDelete by remember { mutableStateOf<SubjectEntity?>(null) }
 
 
-    LaunchedEffect(Unit) {
-        subjectsListState.value = withContext(Dispatchers.IO) {
-            db.subjectsDao.getAllSubjects()
-        }
-    }
-
-    fun updateSearch(query: String) {
-        searchQuery = query
-    }
-
-    fun addNewSubject() {
-        val title = newSubjectTitle.trim()
-
-        if (title.isNotEmpty()) {
-            coroutineScope.launch {
-                val maxId = db.subjectsDao.getMaxSubjectId() ?: 0
-                val newSubject = SubjectEntity(id = maxId + 1, title = title)
-
-                db.subjectsDao.addSubject(newSubject)
-                subjectsListState.value = withContext(Dispatchers.IO) {
-                    db.subjectsDao.getAllSubjects()
-                }
-            }
-            showAddDialog = false
-            newSubjectTitle = ""
-        }
-    }
-
-
-
-    fun editSubject() {
-        val title = newSubjectTitle.trim()
-        val subject = selectedSubject
-
-        if (subject != null && title.isNotEmpty()) {
-            val updatedSubject = subject.copy(title = title)
-
-            coroutineScope.launch {
-                db.subjectsDao.updateSubject(updatedSubject)
-                subjectsListState.value = withContext(Dispatchers.IO) {
-                    db.subjectsDao.getAllSubjects()
-                }
-            }
-            showEditDialog = false
-            newSubjectTitle = ""
-        }
-    }
-
-    fun deleteSubject(subject: SubjectEntity) {
-        coroutineScope.launch {
-            db.subjectsDao.deleteSubject(subject)
-            subjectsListState.value = withContext(Dispatchers.IO) {
-                db.subjectsDao.getAllSubjects()
-            }
-        }
-        showDeleteDialog = false
-    }
-
-    val filteredSubjects = remember(subjectsListState.value, searchQuery) {
-        subjectsListState.value.filter { subject ->
-            subject.title.contains(searchQuery, ignoreCase = true)
-        }
-    }
+    val subjects by viewModel.filteredSubjects.collectAsState()
 
     Column(
         modifier = Modifier
@@ -138,8 +73,8 @@ fun SubjectsListScreen(
                 .padding(8.dp)
         ) {
             TextField(
-                value = searchQuery,
-                onValueChange = { newValue -> updateSearch(newValue) },
+                value = viewModel.searchQuery,
+                onValueChange = { viewModel.searchQuery = it },
                 placeholder = { Text("Search subjects", color = Color.Gray) },
                 leadingIcon = {
                     Icon(
@@ -151,7 +86,7 @@ fun SubjectsListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(4.dp)
-                    .padding(top =12.dp),
+                    .padding(top = 12.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = TextFieldDefaults.textFieldColors(
                     containerColor = Color(0xFFA7BEAE),
@@ -163,8 +98,7 @@ fun SubjectsListScreen(
         Divider(
             color = Color.Gray,
             thickness = 1.dp,
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
         )
 
         LazyColumn(
@@ -173,7 +107,7 @@ fun SubjectsListScreen(
                 .weight(1f)
                 .padding(horizontal = 8.dp)
         ) {
-            items(filteredSubjects) { subject ->
+            items(subjects) { subject ->
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -238,7 +172,7 @@ fun SubjectsListScreen(
         }
     }
 
-// Dialog for adding a new subject
+    // Dialog for adding a new subject
     if (showAddDialog) {
         Dialog(onDismissRequest = { showAddDialog = false }) {
             Surface(
@@ -268,8 +202,7 @@ fun SubjectsListScreen(
                         colors = TextFieldDefaults.textFieldColors(
                             containerColor = Color(0xFFA7BEAE),
                             focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        ),
+                            unfocusedIndicatorColor = Color.Transparent ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -281,7 +214,11 @@ fun SubjectsListScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Button(
-                            onClick = { addNewSubject() },
+                            onClick = {
+                                viewModel.addNewSubject(newSubjectTitle)
+                                showAddDialog = false
+                                newSubjectTitle = ""
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA7BEAE)),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.padding(horizontal = 8.dp)
@@ -302,7 +239,6 @@ fun SubjectsListScreen(
             }
         }
     }
-
 
     if (showEditDialog && selectedSubject != null) {
         Dialog(onDismissRequest = { showEditDialog = false }) {
@@ -348,7 +284,11 @@ fun SubjectsListScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Button(
-                            onClick = { editSubject() },
+                            onClick = {
+                                selectedSubject?.let { viewModel.editSubject(it, newSubjectTitle) }
+                                showEditDialog = false
+                                newSubjectTitle = ""
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA7BEAE)),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.padding(horizontal = 8.dp)
@@ -369,7 +309,6 @@ fun SubjectsListScreen(
             }
         }
     }
-
 
     if (showDeleteDialog && subjectToDelete != null) {
         Dialog(onDismissRequest = { showDeleteDialog = false }) {
@@ -398,14 +337,14 @@ fun SubjectsListScreen(
                     ) {
                         Button(
                             onClick = {
-                                subjectToDelete?.let { deleteSubject(it) }
+                                subjectToDelete?.let { viewModel.deleteSubject(it) }
+                                showDeleteDialog = false
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(
-                                    0xFFB85042
-                                )
+                                containerColor = Color(0xFFB85042)
                             ),
-                            shape = RoundedCornerShape(24.dp)
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp)
                         ) {
                             Text("Delete", color = Color(0xFFE4E5D1))
                         }
@@ -413,11 +352,10 @@ fun SubjectsListScreen(
                         Button(
                             onClick = { showDeleteDialog = false },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(
-                                    0xFF4E4E50
-                                )
+                                containerColor = Color(0xFF4E4E50)
                             ),
-                            shape = RoundedCornerShape(24.dp)
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp)
                         ) {
                             Text("Cancel", color = Color(0xFFE4E5D1))
                         }
@@ -428,10 +366,11 @@ fun SubjectsListScreen(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-private fun SubjectListScreenPreview() {
-    ManagementStudyingProgressTheme {
-        SubjectsListScreen({})
-    }
-}
+
+//@Preview(showBackground = true)
+//@Composable
+//private fun SubjectListScreenPreview() {
+//    ManagementStudyingProgressTheme {
+//        SubjectsListScreen({})
+//    }
+//}

@@ -74,4 +74,9 @@ dependencies {
     implementation("androidx.room:room-runtime:$room_version")
     ksp("androidx.room:room-compiler:$room_version") // [KSP] to enable KSP look at the rows[4-5] of this file
     implementation("androidx.room:room-ktx:$room_version")
+
+    // DI Koin
+    implementation("io.insert-koin:koin-android:3.4.0")
+    implementation("io.insert-koin:koin-android-ext:3.0.1")
+    implementation("io.insert-koin:koin-androidx-compose:3.4.4")
 }

@@ -28,6 +28,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,25 +50,18 @@ import com.example.managementstudyingprogress.data.entity.LabStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
+import org.koin.androidx.compose.getViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SubjectDetailsScreen(
-    id: Int
-) {
-    val context = LocalContext.current
-    val db = DatabaseStorage.getDatabase(context)
-
-    val subjectState = remember { mutableStateOf<SubjectEntity?>(null) }
-    val subjectLabsState = remember { mutableStateOf<List<SubjectLabEntity>>(emptyList()) }
-
+fun SubjectDetailsScreen(viewModel: SubjectDetailsViewModel = getViewModel(), id: Int) {
+    val subjectState by viewModel.subjectStateFlow.collectAsState()
+    val subjectLabsState by viewModel.subjectLabsListStateFlow.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var newLabTitle by remember { mutableStateOf("") }
     var newDescription by remember { mutableStateOf("") }
     var newComment by remember { mutableStateOf("") }
-    val coroutineScope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var labToDelete by remember { mutableStateOf<SubjectLabEntity?>(null) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -75,86 +69,10 @@ fun SubjectDetailsScreen(
     var editLabTitle by remember { mutableStateOf("") }
     var editDescription by remember { mutableStateOf("") }
     var editComment by remember { mutableStateOf("") }
-    var selectedStatus by remember { mutableStateOf(LabStatus.NOT_STARTED) }
 
     LaunchedEffect(Unit) {
-        subjectState.value = db.subjectsDao.getSubjectById(id)
-        subjectLabsState.value = db.subjectLabsDao.getSubjectLabsBySubjectId(id)
+        viewModel.initData(id)
     }
-
-    fun addNewLab() {
-        val title = newLabTitle.trim()
-        val description = newDescription.trim()
-        val comment = newComment.trim()
-
-        if (title.isNotEmpty()) {
-            val newLab = SubjectLabEntity(
-                subjectId = subjectState.value?.id ?: 0,
-                title = title,
-                description = description,
-                comment = comment,
-                status = selectedStatus
-            )
-
-            coroutineScope.launch {
-                db.subjectLabsDao.addSubjectLab(newLab)
-                subjectLabsState.value = withContext(Dispatchers.IO) {
-                    db.subjectLabsDao.getSubjectLabsBySubjectId(subjectState.value?.id ?: 0)
-                }
-            }
-            showAddDialog = false
-            newLabTitle = ""
-            newDescription = ""
-            newComment = ""
-        }
-    }
-
-    fun deleteLab() {
-        labToDelete?.let { lab ->
-            coroutineScope.launch {
-                db.subjectLabsDao.deleteSubjectLab(lab)
-                subjectLabsState.value = withContext(Dispatchers.IO) {
-                    db.subjectLabsDao.getSubjectLabsBySubjectId(subjectState.value?.id ?: 0)
-                }
-            }
-            showDeleteDialog = false
-            labToDelete = null
-        }
-    }
-
-    fun editLab() {
-        editedLab?.let { lab ->
-            val title = editLabTitle?.trim() ?: ""
-            val description = editDescription?.trim() ?: ""
-            val comment = editComment?.trim() ?: ""
-
-            if (title.isNotEmpty()) {
-                val updatedLab = lab.copy(
-                    title = title,
-                    description = description,
-                    comment = comment,
-                    status = selectedStatus
-                )
-
-                coroutineScope.launch {
-                    db.subjectLabsDao.updateSubjectLab(updatedLab)
-                    subjectLabsState.value = withContext(Dispatchers.IO) {
-                        db.subjectLabsDao.getSubjectLabsBySubjectId(subjectState.value?.id ?: 0)
-                    }
-                }
-                showEditDialog = false
-            }
-        }
-    }
-
-    fun getStatusColor(status: LabStatus): Color {
-        return when (status) {
-            LabStatus.IN_PROGRESS -> Color(0xFFB87502)
-            LabStatus.COMPLETED -> Color(0xFF035406)
-            LabStatus.NOT_STARTED -> Color(0xFFB85042) // OrangeRed for "Not Started"
-        }
-    }
-
 
     Column(
         modifier = Modifier
@@ -183,7 +101,7 @@ fun SubjectDetailsScreen(
                     color = Color(0xFF4A4A4A)
                 )
                 Text(
-                    text = "ID: ${subjectState.value?.id}",
+                    text = "ID: ${subjectState?.id ?: "N/A"}",
                     fontSize = 18.sp,
                     color = Color(0xFF7A7A7A),
                     modifier = Modifier
@@ -191,7 +109,7 @@ fun SubjectDetailsScreen(
                         .align(Alignment.Start)
                 )
                 Text(
-                    text = "Title: ${subjectState.value?.title}",
+                    text = "Title: ${subjectState?.title ?: "N/A"}",
                     fontSize = 18.sp,
                     color = Color(0xFF7A7A7A),
                     modifier = Modifier
@@ -208,17 +126,15 @@ fun SubjectDetailsScreen(
                 .align(Alignment.CenterHorizontally),
             color = Color(0xFF4A4A4A)
         )
-        Divider(
-            color = Color.Gray,
-            thickness = 1.dp,
-        )
+        Divider(color = Color.Gray, thickness = 1.dp)
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .align(Alignment.CenterHorizontally)
         ) {
-            items(subjectLabsState.value) { lab ->
+            items(subjectLabsState) { lab ->
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -239,14 +155,11 @@ fun SubjectDetailsScreen(
                             .padding(16.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = lab.title,
                                     fontSize = 20.sp,
@@ -259,9 +172,7 @@ fun SubjectDetailsScreen(
                                 )
                             }
 
-                            Row(
-                                modifier = Modifier.padding(start = 8.dp)
-                            ) {
+                            Row(modifier = Modifier.padding(start = 8.dp)) {
                                 IconButton(onClick = {
                                     editedLab = lab
                                     editLabTitle = lab.title
@@ -298,7 +209,7 @@ fun SubjectDetailsScreen(
                             Text(
                                 text = lab.status.label,
                                 fontSize = 16.sp,
-                                color = getStatusColor(lab.status)
+                                color = viewModel.getStatusColor(lab.status)
                             )
                         }
                         Column(modifier = Modifier.padding(top = 12.dp)) {
@@ -326,7 +237,6 @@ fun SubjectDetailsScreen(
                                 color = Color.Gray,
                             )
                         }
-
                     }
                 }
             }
@@ -430,14 +340,13 @@ fun SubjectDetailsScreen(
                                     .padding(8.dp)
                             ) {
                                 RadioButton(
-                                    selected = (selectedStatus == status),
-                                    onClick = { selectedStatus = status }
+                                    selected = (viewModel.selectedStatus == status),
+                                    onClick = { viewModel.selectedStatus = status }
                                 )
                                 Text(
-                                    color = getStatusColor(status),
+                                    color = viewModel.getStatusColor(status),
                                     text = status.label,
                                     modifier = Modifier.padding(start = 8.dp)
-
                                 )
                             }
                         }
@@ -446,13 +355,16 @@ fun SubjectDetailsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            Button(
-                                onClick = { addNewLab() },
+                            Button(onClick = {
+                                viewModel.addNewLab(newLabTitle, newDescription, newComment)
+                                showAddDialog = false
+                                newLabTitle = ""
+                                newDescription = ""
+                                newComment = ""
+                            },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(
-                                        0xFFA7BEAE
-                                    )
-                                ),
+                                containerColor = Color(0xFFA7BEAE)
+                            ),
                                 shape = RoundedCornerShape(24.dp),
                                 modifier = Modifier.padding(horizontal = 8.dp)
                             ) {
@@ -461,9 +373,7 @@ fun SubjectDetailsScreen(
                             Button(
                                 onClick = { showAddDialog = false },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(
-                                        0xFF4E4E50
-                                    )
+                                    containerColor = Color(0xFF4E4E50)
                                 ),
                                 shape = RoundedCornerShape(24.dp),
                                 modifier = Modifier.padding(horizontal = 8.dp)
@@ -475,6 +385,7 @@ fun SubjectDetailsScreen(
                 }
             }
         }
+
         if (showDeleteDialog) {
             Dialog(onDismissRequest = { showDeleteDialog = false }) {
                 Surface(
@@ -501,11 +412,13 @@ fun SubjectDetailsScreen(
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             Button(
-                                onClick = { deleteLab() },
+                                onClick = {
+                                    labToDelete?.let { viewModel.deleteLab(it) }
+                                    showDeleteDialog = false
+                                    labToDelete = null
+                                },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(
-                                        0xFFB85042
-                                    )
+                                    containerColor = Color(0xFFB85042)
                                 ),
                                 shape = RoundedCornerShape(24.dp)
                             ) {
@@ -515,9 +428,7 @@ fun SubjectDetailsScreen(
                             Button(
                                 onClick = { showDeleteDialog = false },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(
-                                        0xFF4E4E50
-                                    )
+                                    containerColor = Color(0xFF4E4E50)
                                 ),
                                 shape = RoundedCornerShape(24.dp)
                             ) {
@@ -602,24 +513,28 @@ fun SubjectDetailsScreen(
                                     .padding(8.dp)
                             ) {
                                 RadioButton(
-                                    selected = (selectedStatus == status),
-                                    onClick = { selectedStatus = status }
+                                    selected = (viewModel.selectedStatus == status),
+                                    onClick = { viewModel.selectedStatus = status }
                                 )
                                 Text(
-                                    color = getStatusColor(status),
+                                    color = viewModel.getStatusColor(status),
                                     text = status.label,
                                     modifier = Modifier.padding(start = 8.dp)
                                 )
                             }
                         }
 
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             Button(
-                                onClick = { editLab() },
+                                onClick = {
+                                    editedLab?.let {
+                                        viewModel.editLab(it, editLabTitle, editDescription, editComment)
+                                    }
+                                    showEditDialog = false
+                                },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFFA7BEAE)
                                 ),
@@ -646,8 +561,8 @@ fun SubjectDetailsScreen(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun SubjectDetailsScreenPreview() {
-    SubjectDetailsScreen(1)
-}
+//@Preview(showBackground = true)
+//@Composable
+//fun SubjectDetailsScreenPreview() {
+//    SubjectDetailsScreen(1)
+//}

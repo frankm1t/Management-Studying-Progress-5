@@ -18,7 +18,7 @@ import com.example.managementstudyingprogress.data.entity.SubjectEntity
 
 
 @Database(entities = [SubjectEntity::class, SubjectLabEntity::class], version = 1)
-abstract class Lab4Database : RoomDatabase() {
+abstract class Lab5Database : RoomDatabase() {
     //DAO properties for each entity (table)
     // must be abstract (because Room will generate instances by itself)
     abstract val subjectsDao: SubjectDao
@@ -40,20 +40,20 @@ object DatabaseStorage {
     )
 
     // single instance of Lab4Database
-    private var _database: Lab4Database? = null
+    private var _database: Lab5Database? = null
 
-    fun getDatabase(context: Context): Lab4Database {
+    fun getDatabase(context: Context): Lab5Database {
         // if _database already contains Lab4Database instance, return this instance
-        if (_database != null) return _database as Lab4Database
+        if (_database != null) return _database as Lab5Database
         // if not, create instance, preload some data and return this instance
         else {
             // creating Lab4Database instance by builder
             _database = Room.databaseBuilder(
                 context,
-                Lab4Database::class.java, "lab4Database"
+                Lab5Database::class.java, "lab4Database"
             ).build()
 
-            return _database as Lab4Database
+            return _database as Lab5Database
         }
     }
 
